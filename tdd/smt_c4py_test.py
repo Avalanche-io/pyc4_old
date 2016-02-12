@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 """
-Python implementation for testing of the ETC C4 Asset Id. https://github.com/etcenter/C4
+
+TDD python implementation for testing of C4 Asset Id. https://github.com/C4labs/c4python
+
 """
 import os
 import sys
@@ -12,7 +14,6 @@ import base64
 import base58
 
 import unittest
-# from smt_c4py import smt_c4py
 
 class testC4Python(unittest.TestCase):
 
