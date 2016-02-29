@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 
-0Python implementation of C4 Asset Id.
+Python implementation of generating Asset Ids.
 
 """
 
@@ -12,6 +12,8 @@ import getopt
 import hashlib
 import base64
 import base58
+from sys import platform as _platform
+from sys import version as _version
 
 def calculate_hash_512(filename):
     """
@@ -19,7 +21,11 @@ def calculate_hash_512(filename):
     """
     sha512_hash = hashlib.sha512()
     filepath = os.path.join(os.environ["PROJECT_LOC"], filename)
-
+    """
+    PROJECT_LOC environmental variable is set as below for respective platforms
+        Linux: /root/crd/c4py
+        Windows: d:\c4\c4py
+    """
     try:
         with open(filepath, 'r') as f:
             statinfo = os.stat(filepath)
@@ -111,7 +117,8 @@ def generate_c4id():
     #Calculate SHA512 Hash
     hash_sha512, file_path = calculate_hash_512(input_file)
 
-    print "Generating c4id's" + "\n" + "-------------------"
+    print "Generating id's" + "\n" + "---------------------"
+    print "Platform : " + str(_platform) + " " + str(_version)
     print "Filepath: "  + str(file_path)
     
     print "\nFormat \t\t c4id"
