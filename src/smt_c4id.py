@@ -22,9 +22,7 @@ def calculate_hash_512(filename):
     sha512_hash = hashlib.sha512()
     filepath = os.path.join(os.environ["PROJECT_LOC"], filename)
     """
-    PROJECT_LOC environmental variable is set as below for respective platforms
-        Linux: /root/crd/c4py
-        Windows: d:\c4\c4py
+    PROJECT_LOC environmental variable to be set as respective to platforms
     """
     try:
         with open(filepath, 'r') as f:
@@ -110,7 +108,7 @@ def GenerateId_c4(hash_sha512, input_file):
     return string_id
  
 
-def generate_c4id():
+def generate_id():
 
     input_file = 'test.mp4'
 
@@ -154,4 +152,4 @@ def generate_c4id():
 
 
 if __name__ == "__main__":
-    generate_c4id()
+    generate_id()
