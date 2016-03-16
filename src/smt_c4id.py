@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 
-Python implementation of generating Asset Ids.
+Pythonic implementation of generating asset ids for formats : base10, base64old, base64, hex, HEX, h:e:x, c4
 
 """
 
@@ -20,17 +20,14 @@ def calculate_hash_512(filename):
     SHA512 Hash Digest
     """
     sha512_hash = hashlib.sha512()
-    filepath = os.path.join(os.environ["PROJECT_LOC"], filename)
-    """
-    PROJECT_LOC environmental variable to be set as respective to platforms
-    """
+    filepath = os.path.join(os.getcwd(), filename)
     try:
         with open(filepath, 'r') as f:
             statinfo = os.stat(filepath)
             block_size = 100 * (2**20)  #Magic number: 100 * 1MB blocks
             nb_blocks = (statinfo.st_size / block_size) + 1
             cnt_blocks = 0
-            
+
             while True:
                 block = f.read(block_size) 
                 if not block: break
@@ -42,7 +39,7 @@ def calculate_hash_512(filename):
         print "Error: can\'t find file or read data"
     else:
         print "Read content in the file successfully"
-    
+
     return sha512_hash.digest(), filepath
 
 def _as_hex_str(bytes, deliminator):
@@ -71,30 +68,65 @@ def b58encode(bytes):
     return result
 
 def GenerateId_base10(hash_sha512, input_file):
+    """
+    Implement asset id of input file for base10 format
+    @param hash_sha512: string to encode
+    @param input_file: input file to encode
+    """
     string_id = int(hash_sha512.encode("hex_codec"), 16)
     return string_id
 
 def GenerateId_base64(hash_sha512, input_file):
+    """
+    Implement asset id of input file for url-safe base64 format
+    @param hash_sha512: string to encode
+    @param input_file: input file to encode
+    """
     string_id = base64.urlsafe_b64encode(hash_sha512)
     return string_id
 
 def GenerateId_base64old(hash_sha512, input_file):
+    """
+    Implement asset id of input file for base64 format
+    @param hash_sha512: string to encode
+    @param input_file: input file to encode
+    """
     string_id = base64.b64encode(hash_sha512)
     return string_id
 
 def GenerateId_hex(hash_sha512, input_file):
+    """
+    Implement asset id of input file for hex format (lower case)
+    @param hash_sha512: string to encode
+    @param input_file: input file to encode
+    """
     string_id = _as_hex_str(hash_sha512, '')
     return string_id
 
 def GenerateId_HEX(hash_sha512, input_file):
+    """
+    Implement asset id of input file for hex format (upper case)
+    @param hash_sha512: string to encode
+    @param input_file: input file to encode
+    """
     string_id = _as_hex_str(hash_sha512, '').upper()
     return string_id
 
 def GenerateId_Hex(hash_sha512, input_file):
+    """
+    Implement asset id of input file for hex format (with ':' delimiter)
+    @param hash_sha512: string to encode
+    @param input_file: input file to encode
+    """
     string_id = _as_hex_str(hash_sha512, ':')
     return string_id
 
 def GenerateId_c4(hash_sha512, input_file):
+    """
+    Implement asset id of input file for c4 format
+    @param hash_sha512: string to encode
+    @param input_file: input file to encode
+    """
     c4_id_length = 90
     b58_hash = b58encode(hash_sha512)
 
@@ -109,7 +141,9 @@ def GenerateId_c4(hash_sha512, input_file):
  
 
 def generate_id():
-
+    """
+    Implementation to generate asset ids for formats: base10, base64old, base64, hex, HEX, h:e:x, c4
+    """
     input_file = 'test.mp4'
 
     #Calculate SHA512 Hash
