@@ -8,31 +8,69 @@ import os, os.path
 import sys
 import shutil
 import hashlib
+from sys import platform as _platform
 
-def calculate_hash_512(filename):
+#Helpers
+def draw_progress_bar(percent, barLen = 50):
+    """
+    Simple command line progress bar
+    """
+    sys.stdout.write("\r")
+    progress = ""
+    for i in range(barLen):
+        if i < int(barLen * percent / 100):
+            progress += "="
+        else:
+            progress += " "
+    sys.stdout.write("[ %s ] %.2f%%" % (progress, percent))
+    sys.stdout.flush()
+
+def calculate_hash_512(src_filename, target_path):
     """
     SHA512 Hash Digest
     """
     sha512_hash = hashlib.sha512()
-    filepath = os.path.join(os.getcwd(), filename)
+    src_filepath = os.path.join(os.getcwd(), src_filename)
     try:
-        with open(filepath, 'r') as f:
-            statinfo = os.stat(filepath)
-            block_size = 100 * (2**20)  #Magic number: 100 * 1MB blocks
+        with open(src_filepath, "r") as sf:
+            statinfo = os.stat(src_filepath)
+            block_size = 100 * (2**20)  #Magic number: 100 * 1MB * 1MB blocks
             nb_blocks = (statinfo.st_size / block_size) + 1
             cnt_blocks = 0
-            
+
+            if _platform.lower() == "linux" or _platform.lower() == "linux2":
+                l = len(src_filepath.split('/'))
+                target_file_path = os.path.join(target_path, src_filepath.split('/')[l-1])
+            elif _platform.lower() == "win32":
+                l = len(src_filepath.split('\\'))
+                target_file_path = os.path.join(target_path, src_filepath.split('\\')[l-1])
+            print "\nTarget File path: %s" % target_file_path
+
             while True:
-                block = f.read(block_size) 
+                block = sf.read(block_size) 
                 if not block: break
                 sha512_hash.update(block)
+                with open(target_file_path, "a") as tf:
+                    tf.write(block)
                 cnt_blocks = cnt_blocks + 1
                 progress = 100 * cnt_blocks / nb_blocks
-            f.close()
-    except IOError:
-        print "Error: can\'t find file or read data"
+                draw_progress_bar(progress)
+                c4_id_length = 90
+                b58_hash = b58encode(sha512_hash.digest())
 
-    return sha512_hash.digest(), filepath
+                #Pad with '1's if needed
+                padding = ''
+                if len(b58_hash) < (c4_id_length - 2):
+                    padding = ('1' * (c4_id_length - 2 - len(b58_hash)))
+
+                #Combine to form C4 ID
+                string_id = 'c4' + padding + b58_hash
+                if progress == 100:
+                    print "\n  %s" % str(string_id)
+            sf.close()
+            tf.close()
+    except IOError:
+        print "Error: cant find or read '%s' file" % (src_filename)
 
 def b58encode(bytes):
     """
@@ -66,7 +104,7 @@ def GenerateId_c4(hash_sha512, input_file):
     string_id = 'c4' + padding + b58_hash
     return string_id
 
-def compute_c4Id(source_path):
+def compute_c4Id(source_path, target_path):
     """
     Computing the c4id of each file by traversing through directory
     @param source_path: Relative path of the source directory
@@ -74,15 +112,18 @@ def compute_c4Id(source_path):
     # Computing the file-count recursively traversing the directory
     # Excludes the count of number of directories
     cnt = sum([len(f) for r,d,f in os.walk(source_path)])
-    print "Total file count: %d, Generating c4id's...\n" % cnt
+    print "Total file count: %d, Generating c4id's..." % cnt
+
+    delete_folder(target_path)
 
     # Traversing sub-folders for filenames
     for root, subfolder, filenames in os.walk(source_path):
+        newDir = os.path.join(target_path, root[1+len(source_path):])
+        if not os.path.exists(newDir):
+            os.makedirs(newDir)
         for filename in filenames:
-            file_path = str(os.path.join(root, filename))
-            hash_sha512, fpath = calculate_hash_512(file_path)
-            sid = GenerateId_c4(hash_sha512, fpath)
-            print "%s \n  %s" % (fpath, sid)
+            src_file_path = str(os.path.join(root, filename))
+            calculate_hash_512(src_file_path, newDir)
 
 def recursive_copy(source_path, target_path):
     """
@@ -106,7 +147,7 @@ def delete_folder(target_path):
     @param target_path: Relative path of the directory to delete
     """
     if (os.path.exists(target_path) or os.path.isdir(target_path)):
-        print "\nDirectory %s already exists.. deleting..." % target_path
+        print "Directory %s already exists.. deleting..." % target_path
         try:
             shutil.rmtree(target_path)
         except OSError:
@@ -127,8 +168,8 @@ def c4(argv):
 
     # Displays the command-usage incase of incorrect arguments specified 
     if len(argv) < 4:
-	    print cmd_usage
-	    sys.exit(2)
+        print cmd_usage
+        sys.exit(2)
 
     # Perform single source to single target directory copy & c4id generation operation
     if ((len(argv) == 4) and (("-R" in argv[1]) or ("-r" in argv[1]))):
@@ -137,9 +178,7 @@ def c4(argv):
             src_path = src_path[:-2]
         if src_path.endswith('/*.*') or src_path.endswith('\*.*'):
             src_path = src_path[:-4]
-        compute_c4Id(src_path)
-        delete_folder(dest_path)
-        recursive_copy(src_path, dest_path)
+        compute_c4Id(src_path, dest_path)
 
     # Perform single source to multiple target directory copy & c4id generation operation
     elif ((len(argv) > 4) and ("-t" in argv[3])):
@@ -148,15 +187,14 @@ def c4(argv):
             src_path = src_path[:-2]
         if src_path.endswith('/*.*') or src_path.endswith('\*.*'):
             src_path = src_path[:-4]
-        compute_c4Id(src_path)
         for i in range(4, (len(argv))):
             dest_path = argv[i]
-            delete_folder(dest_path)
-            recursive_copy(src_path, dest_path)
+            compute_c4Id(src_path, dest_path)
 
     else:
-	    print "Incorrect arguments specified:\n", cmd_usage
-	    sys.exit(2)
+        print "Incorrect arguments specified:\n", cmd_usage
+        sys.exit(2)
+    print "\n Copied '%s' to '%s' successfully..." % (src_path, dest_path)
 
 if __name__ == '__main__':
-	c4(sys.argv[1:])
+    c4(sys.argv[1:])
