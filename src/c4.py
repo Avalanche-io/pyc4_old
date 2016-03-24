@@ -15,15 +15,15 @@ def draw_progress_bar(percent, barLen = 50):
     """
     Simple command line progress bar
     """
-    sys.stdout.write("\r")
+    # sys.stdout.write("\r")
     progress = ""
     for i in range(barLen):
         if i < int(barLen * percent / 100):
             progress += "="
         else:
             progress += " "
-    sys.stdout.write("[ %s ] %.2f%%" % (progress, percent))
     sys.stdout.flush()
+    sys.stdout.write("[ %s ] %.2f%%" % (progress, percent))
 
 def calculate_hash_512(src_filename, target_path):
     """
@@ -44,29 +44,28 @@ def calculate_hash_512(src_filename, target_path):
             elif _platform.lower() == "win32":
                 l = len(src_filepath.split('\\'))
                 target_file_path = os.path.join(target_path, src_filepath.split('\\')[l-1])
-            print "\nTarget File path: %s" % target_file_path
+            print "\nTarget file path: %s, copying blockwise..." % target_file_path
 
             while True:
-                block = sf.read(block_size) 
-                if not block: break
+                block = sf.read(block_size)
                 sha512_hash.update(block)
+                if not block: break
+                cnt_blocks = cnt_blocks + 1
                 with open(target_file_path, "a") as tf:
                     tf.write(block)
-                cnt_blocks = cnt_blocks + 1
-                progress = 100 * cnt_blocks / nb_blocks
-                draw_progress_bar(progress)
-                c4_id_length = 90
-                b58_hash = b58encode(sha512_hash.digest())
+            progress = 100 * cnt_blocks / nb_blocks
+            draw_progress_bar(progress)
+            c4_id_length = 90
+            b58_hash = b58encode(sha512_hash.digest())
 
-                #Pad with '1's if needed
-                padding = ''
-                if len(b58_hash) < (c4_id_length - 2):
-                    padding = ('1' * (c4_id_length - 2 - len(b58_hash)))
+            #Pad with '1's if needed
+            padding = ''
+            if len(b58_hash) < (c4_id_length - 2):
+                padding = ('1' * (c4_id_length - 2 - len(b58_hash)))
 
-                #Combine to form C4 ID
-                string_id = 'c4' + padding + b58_hash
-                if progress == 100:
-                    print "\n  %s" % str(string_id)
+            #Combine to form C4 ID
+            string_id = 'c4' + padding + b58_hash
+            print "\n  %s" % str(string_id)
             sf.close()
             tf.close()
     except IOError:
@@ -104,43 +103,6 @@ def GenerateId_c4(hash_sha512, input_file):
     string_id = 'c4' + padding + b58_hash
     return string_id
 
-def compute_c4Id(source_path, target_path):
-    """
-    Computing the c4id of each file by traversing through directory
-    @param source_path: Relative path of the source directory
-    """
-    # Computing the file-count recursively traversing the directory
-    # Excludes the count of number of directories
-    cnt = sum([len(f) for r,d,f in os.walk(source_path)])
-    print "Total file count: %d, Generating c4id's..." % cnt
-
-    delete_folder(target_path)
-
-    # Traversing sub-folders for filenames
-    for root, subfolder, filenames in os.walk(source_path):
-        newDir = os.path.join(target_path, root[1+len(source_path):])
-        if not os.path.exists(newDir):
-            os.makedirs(newDir)
-        for filename in filenames:
-            src_file_path = str(os.path.join(root, filename))
-            calculate_hash_512(src_file_path, newDir)
-
-def recursive_copy(source_path, target_path):
-    """
-    Recursively copies source directory content to target directory
-    @param source_path: Relative path of the source directory
-    @param target_path: Relative path of the target directory
-    """
-    print "\nCopying file(s)..."
-    try:
-        shutil.copytree(source_path, target_path)
-    except OSError as e:
-        if e.errno == errno.ENOTDIR:
-            shutil.copy(source_path, target_path)
-        else:
-            raise
-    print "Copied %s to %s" % (source_path, target_path)
-
 def delete_folder(target_path):
     """
     Deletes a folder, if it already exists
@@ -152,6 +114,23 @@ def delete_folder(target_path):
             shutil.rmtree(target_path)
         except OSError:
             os.remove(target_path)
+
+def compute_c4Id(source_path, target_path):
+    """
+    Computing the c4id of each file by traversing through directory
+    @param source_path: Relative path of the source directory
+    """
+    # Delete the target_folder incase already exists
+    delete_folder(target_path)
+
+    # Traversing sub-folders for filenames
+    for root, subfolder, filenames in os.walk(source_path):
+        newDir = os.path.join(target_path, root[1+len(source_path):])
+        if not os.path.exists(newDir):
+            os.makedirs(newDir)
+        for filename in filenames:
+            src_file_path = str(os.path.join(root, filename))
+            calculate_hash_512(src_file_path, newDir)
 
 def c4(argv):
     """
@@ -178,7 +157,12 @@ def c4(argv):
             src_path = src_path[:-2]
         if src_path.endswith('/*.*') or src_path.endswith('\*.*'):
             src_path = src_path[:-4]
+        # Computing the file-count recursively traversing the directory
+        # Excludes the count of number of directories
+        cnt = sum([len(f) for r,d,f in os.walk(src_path)])
+        print "Total source file(s) count: %d, Generating c4id's..." % cnt
         compute_c4Id(src_path, dest_path)
+        print "\nCopied '%s' to '%s' successfully..." % (src_path, dest_path)
 
     # Perform single source to multiple target directory copy & c4id generation operation
     elif ((len(argv) > 4) and ("-t" in argv[3])):
@@ -187,14 +171,18 @@ def c4(argv):
             src_path = src_path[:-2]
         if src_path.endswith('/*.*') or src_path.endswith('\*.*'):
             src_path = src_path[:-4]
+        # Computing the file-count recursively traversing the directory
+        # Excludes the count of number of directories
+        cnt = sum([len(f) for r,d,f in os.walk(src_path)])
+        print "Total source file(s) count: %d, Generating c4id's..." % cnt
         for i in range(4, (len(argv))):
             dest_path = argv[i]
             compute_c4Id(src_path, dest_path)
+            print "\nCopied '%s' to '%s' successfully..." % (src_path, dest_path)
 
     else:
         print "Incorrect arguments specified:\n", cmd_usage
         sys.exit(2)
-    print "\n Copied '%s' to '%s' successfully..." % (src_path, dest_path)
 
 if __name__ == '__main__':
     c4(sys.argv[1:])
