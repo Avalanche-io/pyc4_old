@@ -1,17 +1,21 @@
 #!/usr/bin/python
 
 """
-Pythonic implementation of multi-target copy with c4id generation.
+Pythonic implementation of multi-target copy with c4id generation(Sequential Copy).
 
 """
 import os, os.path
-import sys
+import sys, time
 import shutil
 import hashlib
 from sys import platform as _platform
 
-#Helpers
-def draw_progress_bar(percent, barLen = 50):
+debugFlag = True
+idflag = True
+
+
+# Helpers
+def draw_progress_bar(percent, barLen=50):
     """
     Simple command line progress bar
     """
@@ -25,16 +29,18 @@ def draw_progress_bar(percent, barLen = 50):
     sys.stdout.flush()
     sys.stdout.write("[ %s ] %.2f%%" % (progress, percent))
 
-def calculate_hash_512(src_filename, target_path):
+def calculate_hash_512(src_filename, target_path, idflag):
     """
     SHA512 Hash Digest
     """
+    if debugFlag:
+        stime = time.time()
     sha512_hash = hashlib.sha512()
     src_filepath = os.path.join(os.getcwd(), src_filename)
     try:
         with open(src_filepath, "r") as sf:
             statinfo = os.stat(src_filepath)
-            block_size = 100 * (2**20)  #Magic number: 100 * 1MB * 1MB blocks
+            block_size = 100 * (2**20)  #Magic number: 100 * 1MB blocks
             nb_blocks = (statinfo.st_size / block_size) + 1
             cnt_blocks = 0
 
@@ -44,7 +50,11 @@ def calculate_hash_512(src_filename, target_path):
             elif _platform.lower() == "win32":
                 l = len(src_filepath.split('\\'))
                 target_file_path = os.path.join(target_path, src_filepath.split('\\')[l-1])
-            print "\nTarget file path: %s, copying blockwise..." % target_file_path
+
+            if idflag:
+                print "\nCopying %s to %s, generating c4id..." % (src_filepath, target_file_path)
+            else:
+                print "\nCopying %s to %s" % (src_filepath, target_file_path)
 
             while True:
                 block = sf.read(block_size)
@@ -53,23 +63,29 @@ def calculate_hash_512(src_filename, target_path):
                 cnt_blocks = cnt_blocks + 1
                 with open(target_file_path, "a") as tf:
                     tf.write(block)
-            progress = 100 * cnt_blocks / nb_blocks
-            draw_progress_bar(progress)
-            c4_id_length = 90
-            b58_hash = b58encode(sha512_hash.digest())
+                tf.close()
 
-            #Pad with '1's if needed
-            padding = ''
-            if len(b58_hash) < (c4_id_length - 2):
-                padding = ('1' * (c4_id_length - 2 - len(b58_hash)))
+                if idflag:
+                    c4_id_length = 90
+                    b58_hash = b58encode(sha512_hash.digest())
+        
+                    #Pad with '1's if needed
+                    padding = ''
+                    if len(b58_hash) < (c4_id_length - 2):
+                        padding = ('1' * (c4_id_length - 2 - len(b58_hash)))
+        
+                    #Combine to form C4 ID
+                    string_id = 'c4' + padding + b58_hash
+                    print "\n  %s" % str(string_id)
+                progress = 100 * cnt_blocks / nb_blocks
+                sys.stdout.flush()
+                draw_progress_bar(progress)
+        sf.close()
 
-            #Combine to form C4 ID
-            string_id = 'c4' + padding + b58_hash
-            print "\n  %s" % str(string_id)
-            sf.close()
-            tf.close()
     except IOError:
         print "Error: cant find or read '%s' file" % (src_filename)
+    if debugFlag:
+        print "Copytime: %s sec" % (time.time() - stime)
 
 def b58encode(bytes):
     """
@@ -115,7 +131,7 @@ def delete_folder(target_path):
         except OSError:
             os.remove(target_path)
 
-def compute_c4Id(source_path, target_path):
+def compute_c4Id(source_path, target_path, idflag):
     """
     Computing the c4id of each file by traversing through directory
     @param source_path: Relative path of the source directory
@@ -130,7 +146,7 @@ def compute_c4Id(source_path, target_path):
             os.makedirs(newDir)
         for filename in filenames:
             src_file_path = str(os.path.join(root, filename))
-            calculate_hash_512(src_file_path, newDir)
+            calculate_hash_512(src_file_path, newDir, idflag)
 
 def c4(argv):
     """
@@ -144,7 +160,7 @@ def c4(argv):
     linux = "\n  Linux: c4.py cp -R /src-dir/*.* /dst-dir  (OR)  c4.py cp -R /src-dir/*.* -t /dst-dir1 /dst-dir2"
 
     cmd_usage = desc + syntax + options + win + linux
-
+    global idflag
     # Displays the command-usage incase of incorrect arguments specified 
     if len(argv) < 4:
         print cmd_usage
@@ -160,9 +176,9 @@ def c4(argv):
         # Computing the file-count recursively traversing the directory
         # Excludes the count of number of directories
         cnt = sum([len(f) for r,d,f in os.walk(src_path)])
-        print "Total source file(s) count: %d, Generating c4id's..." % cnt
-        compute_c4Id(src_path, dest_path)
-        print "\nCopied '%s' to '%s' successfully..." % (src_path, dest_path)
+        print "Total source file(s) count: %d" % cnt
+        compute_c4Id(src_path, dest_path, idflag)
+        print "\nCopied '%s' to '%s' successfully...\n" % (src_path, dest_path)
 
     # Perform single source to multiple target directory copy & c4id generation operation
     elif ((len(argv) > 4) and ("-t" in argv[3])):
@@ -174,15 +190,18 @@ def c4(argv):
         # Computing the file-count recursively traversing the directory
         # Excludes the count of number of directories
         cnt = sum([len(f) for r,d,f in os.walk(src_path)])
-        print "Total source file(s) count: %d, Generating c4id's..." % cnt
+        print "Total source file(s) count: %d" % cnt
         for i in range(4, (len(argv))):
             dest_path = argv[i]
-            compute_c4Id(src_path, dest_path)
-            print "\nCopied '%s' to '%s' successfully..." % (src_path, dest_path)
+            compute_c4Id(src_path, dest_path, idflag)
+            print "\nCopied '%s' to '%s' successfully...\n" % (src_path, dest_path)
+            idflag = False
 
     else:
         print "Incorrect arguments specified:\n", cmd_usage
         sys.exit(2)
 
 if __name__ == '__main__':
+    stime = time.time()
     c4(sys.argv[1:])
+    print "Utility Exec time: %s sec" % (time.time() - stime)
