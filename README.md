@@ -1,3 +1,5 @@
-# c4python
-Python implementation of C4 ids
+# PyC4 - Python C4
+Python module for the Cinema Content Creation Cloud frame work.
+
+
 
