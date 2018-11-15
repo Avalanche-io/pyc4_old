@@ -1,10 +1,16 @@
+from __future__ import division
 import sys
 import os
 import hashlib
 import time
-import Queue
+try:
+    import queue
+except ImportError:
+    # Using Python 2 and the future module is not installed
+    import Queue as queue
 import threading
 from argparse import ArgumentParser
+import codecs
 
 __version__ = '0.0.1'
 __version_c4__ = '0.7.0'
@@ -46,10 +52,8 @@ class C4id(object):
         if not (show_path or show_metadata):
             return self.c4id
 
-        if absolute:
-            path = self.path
-        else:
-            path = self.path_relative
+        path = self.path_absolute if absolute else self.path_relative
+
         # TODO: Would this be better handled by a python yaml library?
         ret = ['{c4id}:', '  path: "{path}"']
         if fmt == 'path':
@@ -66,8 +70,14 @@ class C4id(object):
         return '\n'.join(ret).format(c4id=self.c4id, path=path)
 
     @property
+    def path_absolute(self):
+        """ Return the absolute path.
+        """
+        return os.path.abspath(self.path)
+
+    @property
     def path_relative(self):
-        """ Return the relative path, absolute paths are used internally.
+        """ Return the relative path.
         """
         return os.path.relpath(self.path)
 
@@ -105,7 +115,7 @@ class C4(object):
         __b58chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
         __b58base = len(__b58chars)
 
-        long_value = int(bytes.encode("hex_codec"), 16)
+        long_value = int(codecs.encode(bytes, "hex_codec"), 16)
 
         result = ''
         while long_value >= __b58base:
@@ -137,7 +147,9 @@ class C4(object):
         statinfo = os.stat(path)
         bytes = statinfo.st_size
         with open(path, 'rb') as f:
-            nb_blocks = (bytes / self.block_size) + 1
+            # Calculate percent using ints in python 3
+            # https://www.python.org/dev/peps/pep-0238/
+            nb_blocks = (bytes // self.block_size) + 1
             cnt_blocks = 0
 
             while True:
@@ -148,7 +160,7 @@ class C4(object):
                 sha512_hash.update(block)
                 if self.progress_callback is not None:
                     cnt_blocks = cnt_blocks + 1
-                    progress = 100 * cnt_blocks / nb_blocks
+                    progress = 100 * cnt_blocks // nb_blocks
                     self.progress_callback(progress)
 
         return sha512_hash.digest(), bytes
@@ -161,7 +173,7 @@ class C4(object):
         sys.stdout.write("\r")
         progress = ""
         for i in range(barLen):
-            if i < int(barLen * percent / 100):
+            if i < int(barLen * percent // 100):
                 progress += "="
             else:
                 progress += " "
@@ -198,8 +210,8 @@ class C4(object):
         """ Default progress reporting, prints a progress bar.
 
         Args:
-            percent (float): How much of the progress bar to fill in.
-                Passed values between 0.0-100.0.
+            percent (int): How much of the progress bar to fill in.
+                Passed values between 0-100.
         """
         self.draw_progress_bar(percent, self.progress_bar_length)
 
@@ -237,7 +249,7 @@ class C4Queue(C4):
         super(C4Queue, self).__init__(*args, **kwargs)
         self.files = []
         self.hashes = {}
-        self.queue = Queue.Queue()
+        self.queue = queue.Queue()
         self.max_threads = 100
         self.worker_finished_callback = None
         self.show_progress = False
@@ -256,17 +268,17 @@ class C4Queue(C4):
         of items remaining in the queue. Note, this is updated when a item
         starts processing in a thread, not when it finishes.
         """
-        percent = 0.0
+        percent = 0
         # Note: at this point the qsize is less than len(self.files).
         # There may be a huge jump in percent at the start of processing.
-        total = float(len(self.files))
+        total = len(self.files)
         try:
             # using self.queue.join() will prevent detection of KeyboardInterrupt
             while not self.queue.empty():
                 time.sleep(0.1)
                 if total and self.progress_callback:
                     # If there are still items in the queue, provide progress reporting
-                    newPercent = 100 * (1 - self.queue.qsize()/total)
+                    percent = 100 - 100 * (self.queue.qsize() / total)
                     # Only emit the callback if the percent changes
                     if newPercent != percent:
                         percent = newPercent
@@ -318,7 +330,7 @@ class C4Queue(C4):
         while not self.__stopped__():
             try:
                 filename = self.queue.get(timeout=0.1)
-            except Queue.Empty:
+            except queue.Empty:
                 # Nothing to do, the queue is empty
                 break
             try:
@@ -348,9 +360,10 @@ class C4Queue(C4):
             print(output)
             if self.show_progress:
                 # Provide the user with progress feedback.
-                total = float(len(self.files))
+                total = len(self.files)
                 if total:
-                    percent = 100 * (1 - self.queue.qsize()/total)
+                    # Calculate percent done, not remaining
+                    percent = 100 - 100 * (self.queue.qsize() / total)
                     self.progress_default(percent)
                     # Enable clearing the progress bar we just printed.
                     self._progress_shown = True
@@ -386,6 +399,7 @@ def parseArguments():
 
 if __name__ == '__main__':
     args = parseArguments()
+    show_path = args.recursive or len(args.files) > 1
 
     # Configure hashing options
     if args.max_threads <= 1:
@@ -396,6 +410,10 @@ if __name__ == '__main__':
         c4 = C4Queue()
         c4.max_threads = args.max_threads
         c4.worker_finished_callback = c4.worker_finished_default
+        c4.show_path = show_path
+        c4.show_metadata = args.metadata
+        c4.show_absolute = args.absolute
+        c4.show_formatting = args.formatting
         if args.progress:
             c4.show_progress = True
 
@@ -412,7 +430,6 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             sys.exit(0)
 
-    show_path = args.recursive or len(args.files) > 1
     for path in args.files:
         if os.path.isdir(path):
             # TODO: generate the same sort order as the go c4
@@ -429,7 +446,7 @@ if __name__ == '__main__':
             if args.max_threads <= 1:
                 print_hash(path)
             else:
-                c4.files.append(os.path.join(root, f))
+                c4.files.append(path)
     if args.max_threads > 1:
         c4.start()
         c4.join()

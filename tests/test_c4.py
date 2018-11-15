@@ -14,7 +14,7 @@ metadata_format = """{key}:
 
 def test_versionString():
     version = pyc4.C4.versionString()
-    regex = re.compile('c4 version (?P<c4>\d+\.\d+\.\d+) \((?P<platform>\w+)\) pyc4 version: (?P<pyc4>\d+\.\d+\.\d+)')
+    regex = re.compile(r'c4 version (?P<c4>\d+\.\d+\.\d+) \((?P<platform>\w+)\) pyc4 version: (?P<pyc4>\d+\.\d+\.\d+)')
     match = regex.match(version)
     assert match.group('c4') ==  pyc4.__version_c4__
     assert match.group('pyc4') ==  pyc4.__version__
@@ -69,28 +69,30 @@ def test_progress_default(testdir, capsys):
 def test_c4_format(testdir):
     c4 = pyc4.C4()
     path, c4_check = testdir['p40']
+    # Test using both absolute paths and relative paths
     c4id = c4.from_file(path)
-    relative = os.path.relpath(path)
+    relative_path = os.path.relpath(path)
+    c4id_relative = c4.from_file(relative_path)
 
     # Check the default format options
     output = c4id.format()
     assert output == c4_check
 
-    output = c4id.format(show_path=True)
-    check = '{}:\n  path: "{}"'.format(c4id, relative)
-    assert output == check
+    check = '{}:\n  path: "{}"'.format(c4id, relative_path)
+    assert c4id.format(show_path=True) == check
+    assert c4id_relative.format(show_path=True) == check
 
-    output = c4id.format(show_path=True, absolute=True)
     check = '{}:\n  path: "{}"'.format(c4id, path)
-    assert output == check
+    assert c4id.format(show_path=True, absolute=True) == check
+    assert c4id_relative.format(show_path=True, absolute=True) == check
 
-    output = c4id.format(show_path=True, absolute=True, fmt='path')
     check = '{}:\n  c4id: {}'.format(path, c4id)
-    assert output == check
+    assert c4id.format(show_path=True, absolute=True, fmt='path') == check
+    assert c4id_relative.format(show_path=True, absolute=True, fmt='path') == check
 
     # Check the metadata formatting
     output = c4id.format(show_metadata=True)
-    check = metadata_format.format(key=c4id, fmt='path', value='"{}"'.format(relative))
+    check = metadata_format.format(key=c4id, fmt='path', value='"{}"'.format(relative_path))
     assert output == check
 
     output = c4id.format(show_metadata=True, absolute=True)
@@ -98,5 +100,5 @@ def test_c4_format(testdir):
     assert output == check
 
     output = c4id.format(show_metadata=True, fmt='path')
-    check = metadata_format.format(key=relative, fmt='c4id', value=c4id)
+    check = metadata_format.format(key=relative_path, fmt='c4id', value=c4id)
     assert output == check

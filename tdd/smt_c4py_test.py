@@ -11,7 +11,6 @@ import getopt
 
 import hashlib
 import base64
-import base58
 
 import unittest
 from sys import platform as _platform
