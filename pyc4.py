@@ -22,13 +22,31 @@ class HashIncomplete(Exception):
     """ Raised if the c4 hash calculation was canceled before finishing. """
 
 class C4id(object):
+    """ Data store object for a C4id.
+
+    Args:
+        c4id (str): The c4id for this file object.
+        path (str or None, optional): The path for this file object.
+        bytes (int or None, optional): The size of the file in bytes.
+
+    Attributes:
+        c4id (str): The c4id for this file object.
+        path (str): The path for this file object.
+        bytes (int): The size of the file in bytes.
+        name (bool or None): The filename of this file. This is None until 
+            metadata_from_path is called.
+        folder (bool or None): This object is a folder. This is None until
+            metadata_from_path is called.
+        link (bool or None): This object is a link. This is None until
+            metadata_from_path is called.
+    """
     def __init__(self, c4id, path=None, bytes=None):
         self.c4id = c4id
+        self.path = path
         self.bytes = bytes
+        self.name = None
         self.folder = None
         self.link = None
-        self.name = None
-        self.path = path
 
     def __str__(self):
         return self.c4id
@@ -82,17 +100,37 @@ class C4id(object):
         return os.path.relpath(self.path)
 
     def metadata_from_path(self):
+        """ Populate folder, link, and name.
+        """
         self.folder = os.path.isdir(self.path)
         self.link = os.path.islink(self.path)
         self.name = os.path.basename(self.path)
 
 class C4(object):
+    """ Preform C4 hashing operations.
+
+    Example:
+        c4 = C4()
+        c4id = c4.from_file(myFile)
+        print(c4id.format(show_metadata=True))
+
+    Args:
+        block_size (int, optional): Read and hash each file in byte chunks
+            of this size. Defaults to 100MB chunks.
+
+    Attributes:
+        progress_callback (callable or None): This callable will be called
+            for each data block processed. This can be used to provide progress
+            reporting. The callable will be passed a int value between 0-100
+            representing the progress of the hash generation.
+        progress_bar_length (int): The size of the text progress bar printed
+            when using the progress_default callback.
+    """
     c4_id_length = 90
 
     def __init__(self, block_size=100 * (2**20)):
         # Magic number: 100 * 1MB blocks
         self.block_size = block_size
-        self.absolute_paths = True
         self.progress_callback = None
         self.progress_bar_length = 50
 
@@ -167,8 +205,13 @@ class C4(object):
 
     @classmethod
     def draw_progress_bar(cls, percent, barLen = 50):
-        """
-        Simple command line progress bar
+        """ Simple command line progress bar
+
+        This will clear the previous line before drawing the progress bar.
+
+        Args:
+            percent (int): Current value of the progress 0-100.
+            barLen (int, optional): How long the bar is drawn in character.
         """
         sys.stdout.write("\r")
         progress = ""
@@ -240,9 +283,24 @@ class C4Queue(C4):
         files (list): A list of all file paths to process.
         hashes (dict): This dict will be updated to contain the file path
             and C4id object generated for each file path.
+        queue (queue.Queue): The Queue object used to manage processing of
+            files by the child threads.
         max_threads (int): Use this to limit the number of threads used to
             process C4 hashes. This class will use a thread per file up to
             this total. Defaults to 100.
+        worker_finished_callback (callable or None): Called each time a c4id
+            finishes processing. The callable will be passed the C4id object
+            that was just generated.
+        show_progress (bool): If using worker_finished_default, should a
+            progress bar be drawn? Defaults to False.
+        show_path (bool): If using worker_finished_default, this is passed to
+            c4id.format. Defaults to False.
+        show_metadata (bool): If using worker_finished_default, this is passed to
+            c4id.format. Defaults to False.
+        show_absolute (bool): If using worker_finished_default, this is passed to
+            c4id.format. Defaults to False.
+        show_formatting (bool): If using worker_finished_default, this is passed to
+            c4id.format. Defaults to False.
     """
 
     def __init__(self, *args, **kwargs):
@@ -278,7 +336,7 @@ class C4Queue(C4):
                 time.sleep(0.1)
                 if total and self.progress_callback:
                     # If there are still items in the queue, provide progress reporting
-                    percent = 100 - 100 * (self.queue.qsize() / total)
+                    newPercent = 100 - 100 * (self.queue.qsize() / total)
                     # Only emit the callback if the percent changes
                     if newPercent != percent:
                         percent = newPercent
@@ -323,7 +381,6 @@ class C4Queue(C4):
         """
         # Create a new C4 object to hash per thread without progress_report
         c4 = C4(self.block_size)
-        c4.absolute_paths = self.absolute_paths
         c4.progress_bar_length = self.progress_bar_length
 
         # process any remaining items in the queue
@@ -343,6 +400,13 @@ class C4Queue(C4):
                 self.worker_finished_callback(c4id)
 
     def worker_finished_default(self, c4id):
+        """ Default progress reporting.
+
+        Prints each c4id info as soon as it finishes processing.
+
+        Args:
+            c4id (C4id): The c4id that was just generated.
+        """
         output = c4id.format(
             show_metadata=self.show_metadata,
             show_path=self.show_path,
@@ -409,6 +473,8 @@ if __name__ == '__main__':
     else:
         c4 = C4Queue()
         c4.max_threads = args.max_threads
+        # Setup the worker_finished_callback so it prints the results of
+        # hashes as they finish.
         c4.worker_finished_callback = c4.worker_finished_default
         c4.show_path = show_path
         c4.show_metadata = args.metadata
@@ -418,6 +484,8 @@ if __name__ == '__main__':
             c4.show_progress = True
 
     def print_hash(path):
+        """ Hash and print path.
+        """
         try:
             c4id = c4.from_file(path)
             output = c4id.format(
@@ -447,6 +515,7 @@ if __name__ == '__main__':
                 print_hash(path)
             else:
                 c4.files.append(path)
+    # If using threading, start processing the threads and wait for them to finish.
     if args.max_threads > 1:
         c4.start()
         c4.join()
