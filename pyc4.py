@@ -12,7 +12,7 @@ import threading
 from argparse import ArgumentParser
 import codecs
 
-__version__ = '0.0.1'
+__version__ = '0.1'
 __version_c4__ = '0.7.0'
 
 # When using threading this is used to ensure printing is consistent.
