@@ -1,6 +1,16 @@
+import sys
 import pyc4
 import pytest
 
+
+def worker_started_callback(c4, filename):
+    # prevent any other threads from printing while we update the console
+    with c4.lock:
+        if c4.show_progress and c4._progress_shown:
+            # Clear the progress bar we printed to the console only if it
+            # was already shown.
+            sys.stdout.write("\r")
+        print('Worker_started: {}'.format(filename))
 
 def buildChecks(testdir):
     return {path:c4_check for path, c4_check in testdir.values()}
@@ -25,6 +35,7 @@ def test_worker_finished_default(testdir, capsys):
     c4 = pyc4.C4Queue()
     c4.max_threads = 2
     c4.show_progress = True
+    c4.worker_started_callback = worker_started_callback
     c4.worker_finished_callback = c4.worker_finished_default
     # Give c4 something to process in the queue.
     c4.files = checks.keys()
@@ -42,6 +53,7 @@ def test_worker_finished_default(testdir, capsys):
     output = captured.out.replace('\n\r', '\n')
 
     hashes = []
+    started = []
     # parse the output for all c4 hashes that were printed
     lines = output.split('\n')
     for line in lines:
@@ -49,8 +61,13 @@ def test_worker_finished_default(testdir, capsys):
         for item in split:
             if item.startswith('c4'):
                 hashes.append(item)
+            elif item.startswith('Worker_started:'):
+                started.append(item)
 
     # and check that all expected hashes were generated
     for c4id in checks.values():
         assert str(c4id) in hashes
     assert len(checks.values()) == len(hashes)
+
+    # Check that the worker_started_callback output was generated.
+    assert len(started) == len(checks)

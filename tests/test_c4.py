@@ -14,7 +14,7 @@ metadata_format = """{key}:
 
 def test_versionString():
     version = pyc4.C4.versionString()
-    regex = re.compile(r'c4 version (?P<c4>\d+\.\d+\.\d+) \((?P<platform>\w+)\) pyc4 version: (?P<pyc4>\d+\.\d+\.\d+)')
+    regex = re.compile(r'c4 version (?P<c4>\d+\.\d+\.\d+) \((?P<platform>\w+)\) pyc4 version: (?P<pyc4>\d+\.\d+(\.\d)*)')
     match = regex.match(version)
     assert match.group('c4') ==  pyc4.__version_c4__
     assert match.group('pyc4') ==  pyc4.__version__

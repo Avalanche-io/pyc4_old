@@ -5,18 +5,15 @@ import hashlib
 import time
 try:
     import queue
-except ImportError:
+except ImportError: # pragma: no cover "Not testable"
     # Using Python 2 and the future module is not installed
     import Queue as queue
 import threading
 from argparse import ArgumentParser
 import codecs
 
-__version__ = '0.1'
+__version__ = '0.2'
 __version_c4__ = '0.7.0'
-
-# When using threading this is used to ensure printing is consistent.
-_thread_lock = threading.Lock()
 
 class HashIncomplete(Exception):
     """ Raised if the c4 hash calculation was canceled before finishing. """
@@ -119,6 +116,9 @@ class C4(object):
             of this size. Defaults to 100MB chunks.
 
     Attributes:
+        lock (threading.Lock): Use this lock object to block the other worker
+            threads. This is used internally to prevent issues with two threads
+            printing on top of each other. This is a class property.
         progress_callback (callable or None): This callable will be called
             for each data block processed. This can be used to provide progress
             reporting. The callable will be passed a int value between 0-100
@@ -242,7 +242,9 @@ class C4(object):
 
         #Pad with '1's if needed
         padding = ''
-        if len(b58_hash) < (self.c4_id_length - 2):
+        if len(b58_hash) < (self.c4_id_length - 2): # pragma: no cover
+            # Unable to generate a hash that requires padding, but leaving this
+            # code for completeness.
             padding = ('1' * (self.c4_id_length - 2 - len(b58_hash)))
 
         #Combine to form C4 ID
@@ -288,6 +290,9 @@ class C4Queue(C4):
         max_threads (int): Use this to limit the number of threads used to
             process C4 hashes. This class will use a thread per file up to
             this total. Defaults to 100.
+        worker_started_callback (callable or None): Called each time a c4id
+            starts processing. The callable will be passed the C4Queue
+            instance and the file path that will have a c4id generated.
         worker_finished_callback (callable or None): Called each time a c4id
             finishes processing. The callable will be passed the C4id object
             that was just generated.
@@ -295,13 +300,16 @@ class C4Queue(C4):
             progress bar be drawn? Defaults to False.
         show_path (bool): If using worker_finished_default, this is passed to
             c4id.format. Defaults to False.
-        show_metadata (bool): If using worker_finished_default, this is passed to
-            c4id.format. Defaults to False.
-        show_absolute (bool): If using worker_finished_default, this is passed to
-            c4id.format. Defaults to False.
-        show_formatting (bool): If using worker_finished_default, this is passed to
-            c4id.format. Defaults to False.
+        show_metadata (bool): If using worker_finished_default, this is passed
+            to c4id.format. Defaults to False.
+        show_absolute (bool): If using worker_finished_default, this is passed
+            to c4id.format. Defaults to False.
+        show_formatting (bool): If using worker_finished_default, this is
+            passed to c4id.format. Defaults to False.
     """
+
+    # This class property is used to ensure correct printing across threads.
+    lock = threading.Lock()
 
     def __init__(self, *args, **kwargs):
         super(C4Queue, self).__init__(*args, **kwargs)
@@ -309,6 +317,7 @@ class C4Queue(C4):
         self.hashes = {}
         self.queue = queue.Queue()
         self.max_threads = 100
+        self.worker_started_callback = None
         self.worker_finished_callback = None
         self.show_progress = False
         self.show_path = False
@@ -346,7 +355,7 @@ class C4Queue(C4):
             if not self.__stopped__():
                 # Finish processing all threads
                 self.queue.join()
-        except KeyboardInterrupt:
+        except KeyboardInterrupt: # pragma: no cover "Not testable"
             # The user canceled the operation, stop processing and exit
             self.stop()
         # Wait for all threads to complete
@@ -371,7 +380,7 @@ class C4Queue(C4):
 
         See: https://stackoverflow.com/a/325528
         """
-        self._stop_event.set()
+        self._stop_event.set() # pragma: no cover "Not testable"
 
     def __stopped__(self):
         return self._stop_event.is_set()
@@ -390,12 +399,16 @@ class C4Queue(C4):
             except queue.Empty:
                 # Nothing to do, the queue is empty
                 break
+            # if requested, report that a c4id is starting processing.
+            if self.worker_started_callback is not None:
+                self.worker_started_callback(self, filename)
             try:
                 c4id = c4.from_file(filename)
-            except HashIncomplete:
+            except HashIncomplete: # pragma: no cover "Not testable"
                 break
             self.hashes[filename] = c4id
             self.queue.task_done()
+            # If requested, report that c4id finished processing.
             if self.worker_finished_callback is not None:
                 self.worker_finished_callback(c4id)
 
@@ -415,7 +428,7 @@ class C4Queue(C4):
         )
 
         # prevent any other threads from printing while we update the console
-        with _thread_lock:
+        with self.lock:
             if self.show_progress and self._progress_shown:
                 # Clear the progress bar we printed to the console only if it
                 # was already shown.
