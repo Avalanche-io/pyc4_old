@@ -12,6 +12,7 @@ import os, os.path
 import sys
 import shutil
 import hashlib
+from sys import platform as _platform
 
 exitFlag = 0
 repeat = ""
@@ -62,10 +63,10 @@ def calculate_hash_512(src_filename, target_filename, idFlag):
 
             if _platform.lower() == "linux" or _platform.lower() == "linux2":
                 l = len(src_filepath.split('/'))
-                target_file_path = os.path.join(target_path, src_filepath.split('/')[l - 1])
+                target_file_path = os.path.join(target_filename, src_filepath.split('/')[l - 1])
             elif _platform.lower() == "win32":
                 l = len(src_filepath.split('\\'))
-                target_file_path = os.path.join(target_path, src_filepath.split('\\')[l - 1])
+                target_file_path = os.path.join(target_filename, src_filepath.split('\\')[l - 1])
 
             while True:
                 block = sf.read(block_size)
